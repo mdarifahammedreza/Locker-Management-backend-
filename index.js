@@ -1,56 +1,64 @@
 const express = require('express');
-var cors = require('cors');
+const cors = require('cors');
+const status = require('./Status.js');
+const Server = require('./RunServer.js');
 const app = express();
-const port = 7000;
+const port = 3000;
 
-// Middleware
+console.log(status.Author);
+
 app.use(cors());
 app.use(express.json());
 
-// In-memory stack array
-let stack = [];
-
-// Server status
-const status = {
-    Status_code: 400,
-    Status: "Locker server run successfully",
-    Author: "Md Arif Ahammed Reza",
-    Contact: "reza35-951@diu.edu.bd"
-};
-
-// GET request for server status
-app.get('/', (req, res) => {
-    res.send(status);
+app.get('/', async (req, res) => {
+  res.send(status);
+  const server = new Server();
+  await server.RunServer(); // Ensure the server is running before making DB calls
 });
 
-// POST request to handle locker key data
-app.post('/api/Locker/key', (req, res) => {
-    console.log("Request body:", req.body);
-    const data = req.body.data || "defaultData";
-    console.log(data);
-    
-    // Check if the sID already exists in the stack
-    const existingEntry = stack.find(entry => entry.sID === data);
-    if (existingEntry) {
-        return res.status(400).send({ message: "ID already taken, please use a different key." });
-    }
+app.post('/api/Locker/key', async (req, res) => {
+  const data = req.body.data || "00";
+  console.log(data);
 
-    // Create a new stack entry
-    const date = new Date();
-    const time = date.toLocaleTimeString();
-    
-    // Push entry onto the stack
-    stack.push({ sID: data, date: date.toISOString(), time });
+  const server = new Server();
+  await server.RunServer(); // Ensure the server is running before making DB calls
 
-    res.send({ message: "Successfully taken id", data: data });
+  const message = await server.StackOfKey(data);
+  console.log(message);
+
+  res.json(message);
 });
 
 // GET request to retrieve all entries in LIFO order
-app.get('/api/Locker/stack', (req, res) => {
-    res.status(200).send(stack.reverse()); // Send the stack in LIFO order
+app.get('/api/Locker/stack', async (req, res) => {
+  try {
+    const server = new Server();
+    await server.RunServer(); // Ensure the server is running before making DB calls
+    const collection = server.db.collection("Stack_of_Keys");
+
+    // Retrieve all entries and send them in LIFO order
+    const keys = await collection.find({}).toArray();
+    res.status(200).send(keys.reverse());
+  } catch (error) {
+    console.error("Error retrieving stack:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
+});
+app.get('/api/student/stack', async (req, res) => {
+  try {
+    const server = new Server();
+    await server.RunServer(); // Ensure the server is running before making DB calls
+    const collection = server.db.collection("Student_info");
+
+    // Retrieve all entries and send them in LIFO order
+    const keys = await collection.find({}).toArray();
+    res.status(200).send(keys);
+  } catch (error) {
+    console.error("Error retrieving stack:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
 });
 
-// Start the server
 app.listen(port, () => {
-    console.log(`Example app listening on port ${port}`);
+  console.log(`Example app listening on port ${port}`);
 });
