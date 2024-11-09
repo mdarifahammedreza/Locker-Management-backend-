@@ -37,6 +37,21 @@ app.post('/api/student/booked-key', async (req, res) => {
   const booked_key = req.body.key || null;
   console.log("booked_key",booked_key);
   if (!rfId) return res.status(400).send({ message: "RFID is required." });
+  if (booked_key != null) {
+    try {
+      const message = await server.StackOfKey(booked_key);
+      await server.db.collection("Student_info").updateOne(
+        { rfId },
+        { $set: { keyStatus: "Available", lastKeyActivityTime: new Date().toISOString(), TakenKeyNumber: null } }
+      );
+      return res.json(message); // Use `return` to avoid executing the next try block.
+    } catch (error) {
+      console.error("Error handling key stack:", error);
+      return res.status(500).send({ message: "Error processing the key stack." });
+    }
+  }
+  
+
 
   try {
     // Get the latest key from the Stack_of_Keys
