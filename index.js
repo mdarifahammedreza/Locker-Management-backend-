@@ -5,105 +5,87 @@ const Server = require('./RunServer.js');
 const app = express();
 const port = 3000;
 
-console.log(status.Author);
+// Initialize server and database connection
+const server = new Server();
+
+(async () => {
+  await server.RunServer();
+  console.log(status.Author);
+})();
 
 app.use(cors());
 app.use(express.json());
 
-// const instance = ()=>{
-//   const server =
-// }
+// Root route for status
+app.get('/', (req, res) => res.send(status));
 
-
-
-app.get('/', async (req, res) => {
-  res.send(status);
-  const server = new Server();
-  await server.RunServer(); // Ensure the server is running before making DB calls
-});
-
+// Route to handle key stack
 app.post('/api/Locker/key', async (req, res) => {
-  const data = req.body.data || "00";
-  console.log(data);
-
-  const server = new Server();
-  await server.RunServer(); // Ensure the server is running before making DB calls
-
-  const message = await server.StackOfKey(data);
-  console.log(message);
-
-  res.json(message);
+  const data = req.body.data;
+  try {
+    const message = await server.StackOfKey(data);
+    res.json(message);
+  } catch (error) {
+    console.error("Error handling key stack:", error);
+    res.status(500).send({ message: "Error processing the key stack." });
+  }
 });
 
+// Route for booking key by RFID
 app.post('/api/student/booked-key', async (req, res) => {
   const rfId = req.body.data;
-  console.log(rfId);
-
-  if (!rfId) {
-    return res.status(404).send({ message: "Scanning Failed!" });
-  }
+  const booked_key = req.body.key || null;
+  console.log("booked_key",booked_key);
+  if (!rfId) return res.status(400).send({ message: "RFID is required." });
 
   try {
-    const server = new Server();
-    await server.RunServer();
-    const collection = server.db.collection("Student_info");
+    // Get the latest key from the Stack_of_Keys
+    const key = (await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray())[0].Key_ID;
+    if (!key) return res.status(404).send({ message: "No keys available." });
 
-    // Find the student by RF_ID
-    const student = await collection.findOne({ RF_ID: rfId });
+    // Find the student in the Student_info collection
+    const student = await server.db.collection("Student_info").findOne({ rfId });
+    if (!student) return res.status(404).send({ message: "Student not found!" });
+    if (student.keyStatus === 'Taken') return res.status(200).send({ message: "Key already taken!" ,code:"Camera activeted"});
 
-    // Check if the student exists and their Key Status is null
-    if (!student) {
-      return res.status(404).send({ message: "Student not found!" });
-    }
-
-    if (student.Key_Status !== null) {
-      return res.status(403).send({ message: "Key already taken!" });
-    }
-
-    // Update Key Status to 'Taken'
-    await collection.updateOne(
-      { RF_ID: rfId },
-      { $set: { Key_Status: "Taken", Last_Key_Activity_Time: new Date().toISOString() } }
+    // Update the student's key status and store the taken key
+    await server.db.collection("Student_info").updateOne(
+      { rfId },
+      { $set: { keyStatus: "Taken", lastKeyActivityTime: new Date().toISOString(), TakenKeyNumber: key } }
     );
 
-    res.status(200).send({ message: "Key booked successfully!" });
+    // Remove the key from Stack_of_Keys
+    await server.db.collection("Stack_of_Keys").deleteOne({ Key_ID: key });
+
+    res.status(200).send({ message: `Key booked successfully!->${key}` });
   } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "An error occurred while booking the key." });
+    console.error("Error booking key:", error);
+    res.status(500).send({ message: "Error booking the key." });
   }
 });
 
-
-// GET request to retrieve all entries in LIFO order
+// Route to retrieve stack of keys in LIFO order
 app.get('/api/Locker/stack', async (req, res) => {
   try {
-    const server = new Server();
-    await server.RunServer(); // Ensure the server is running before making DB calls
-    const collection = server.db.collection("Stack_of_Keys");
-
-    // Retrieve all entries and send them in LIFO order
-    const keys = await collection.find({}).toArray();
-    res.status(200).send(keys.reverse());
-  } catch (error) {
-    console.error("Error retrieving stack:", error);
-    res.status(500).send({ message: "Internal server error" });
-  }
-});
-app.get('/api/student/stack', async (req, res) => {
-  try {
-    const server = new Server();
-    await server.RunServer(); // Ensure the server is running before making DB calls
-    const collection = server.db.collection("Student_info");
-
-    // Retrieve all entries and send them in LIFO order
-    const keys = await collection.find({}).toArray();
+    const keys = await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(keys);
   } catch (error) {
     console.error("Error retrieving stack:", error);
-    res.status(500).send({ message: "Internal server error" });
+    res.status(500).send({ message: "Error retrieving stack." });
+  }
+});
+
+// Route to retrieve student information stack
+app.get('/api/student/stack', async (req, res) => {
+  try {
+    const students = await server.db.collection("Student_info").find({}).sort({ _id: -1 }).toArray();
+    res.status(200).send(students);
+  } catch (error) {
+    console.error("Error retrieving student stack:", error);
+    res.status(500).send({ message: "Error retrieving student stack." });
   }
 });
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`App listening on port ${port}`);
 });
