@@ -14,8 +14,7 @@ const status = {
 };
 
 // MongoDB connection
-const uri = `mongodb+srv://reza1:QxAB25LI1yJJ65AG@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&tls=true&appName=REZA`;
-// const uri =  'mongodb://reza1:QxAB25LI1yJJ65AG@reza-shard-00-00.lrvbq.mongodb.net:27017,reza-shard-00-01.lrvbq.mongodb.net:27017,reza-shard-00-02.lrvbq.mongodb.net:27017/?replicaSet=atlas-g3el6m-shard-0&authSource=admin&retryWrites=true&w=majority';;
+const uri = `mongodb+srv://reza1:${process.env.PASS}@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&appName=REZA`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -30,20 +29,17 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-let cachedDb = null;
-
-async function connectToMongoDB() {
-  if (cachedDb) {
-    return cachedDb;
+(async () => {
+  try {
+    console.log("Connecting to MongoDB...");
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log("Successfully connected to MongoDB!");
+    db = client.db('reza1');
+  } catch (error) {
+    console.error("Error connecting to MongoDB:", error);
   }
-  console.log("Connecting to MongoDB...");
-  await client.connect();
-  await client.db("admin").command({ ping: 1 });
-  console.log("Successfully connected to MongoDB!");
-  cachedDb = client.db('reza1');
-  return cachedDb;
-}
-connectToMongoDB().catch(console.error);
+})();
 
 // Helper: Handle DB errors
 const handleDbError = (res, errorMessage, statusCode = 500) => {
@@ -121,7 +117,6 @@ app.get('/api/Locker/stack', async (req, res) => {
     const keys = await db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(keys);
   } catch (error) {
-    console.log(error);
     handleDbError(res, "Error retrieving stack.");
   }
 });
