@@ -13,94 +13,117 @@ const server = new Server();
   console.log(status.Author);
 })();
 
+// Middleware for CORS and JSON handling
 app.use(cors());
 app.use(express.json());
 
-// Root route for status
+// Helper function to handle DB errors and responses
+const handleDbError = (res, errorMessage, statusCode = 500) => {
+  console.error(errorMessage, errorMessage);
+  res.status(statusCode).send({ message: errorMessage });
+};
+
+// Route for status
 app.get('/', (req, res) => res.send(status));
 
-// Route to handle key stack
+// Route to handle key stack actions (simplified for reuse)
 app.post('/api/Locker/key', async (req, res) => {
-  const data = req.body.data;
+  const { data } = req.body;
   try {
     const message = await server.StackOfKey(data);
     res.json(message);
   } catch (error) {
-    console.error("Error handling key stack:", error);
-    res.status(500).send({ message: "Error processing the key stack." });
+    handleDbError(res, "Error processing the key stack.");
   }
 });
 
-// Route for booking key by RFID
+// Route for booking key by RFID (with booking logic reused)
 app.post('/api/student/booked-key', async (req, res) => {
-  const rfId = req.body.data;
-  const booked_key = req.body.key || null;
-  console.log("booked_key",booked_key);
+  const { data: rfId, key: bookedKey } = req.body;
+
   if (!rfId) return res.status(400).send({ message: "RFID is required." });
-  if (booked_key != null) {
+
+  if (bookedKey) {
     try {
-      const message = await server.StackOfKey(booked_key);
+      const message = await server.StackOfKey(bookedKey);
       await server.db.collection("Student_info").updateOne(
         { rfId },
         { $set: { keyStatus: "Available", lastKeyActivityTime: new Date().toISOString(), TakenKeyNumber: null } }
       );
-      return res.json(message); // Use `return` to avoid executing the next try block.
+      return res.json(message);
     } catch (error) {
-      console.error("Error handling key stack:", error);
-      return res.status(500).send({ message: "Error processing the key stack." });
+      return handleDbError(res, "Error processing the key stack.");
     }
   }
-  
-
 
   try {
-    // Get the latest key from the Stack_of_Keys
-    const key = (await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray())[0].Key_ID;
+    const key = (await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray())[0]?.Key_ID;
     if (!key) return res.status(404).send({ message: "No keys available." });
 
-    // Find the student in the Student_info collection
     const student = await server.db.collection("Student_info").findOne({ rfId });
     if (!student) return res.status(404).send({ message: "Student not found!" });
-    if (student.keyStatus === 'Taken') return res.status(200).send({ message: "Key already taken!" ,code:"Camera activeted"});
+    if (student.keyStatus === 'Taken') return res.status(200).send({ message: "Key already taken!", code: "Camera activated" });
 
-    // Update the student's key status and store the taken key
     await server.db.collection("Student_info").updateOne(
       { rfId },
       { $set: { keyStatus: "Taken", lastKeyActivityTime: new Date().toISOString(), TakenKeyNumber: key } }
     );
 
-    // Remove the key from Stack_of_Keys
     await server.db.collection("Stack_of_Keys").deleteOne({ Key_ID: key });
 
     res.status(200).send({ message: `Key booked successfully!->${key}` });
   } catch (error) {
-    console.error("Error booking key:", error);
-    res.status(500).send({ message: "Error booking the key." });
+    return handleDbError(res, "Error booking the key.");
   }
 });
 
-// Route to retrieve stack of keys in LIFO order
+// Route to retrieve the stack of keys
 app.get('/api/Locker/stack', async (req, res) => {
   try {
     const keys = await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(keys);
   } catch (error) {
-    console.error("Error retrieving stack:", error);
-    res.status(500).send({ message: "Error retrieving stack." });
+    handleDbError(res, "Error retrieving stack.");
   }
 });
 
-// Route to retrieve student information stack
+// Route to retrieve student stack
 app.get('/api/student/stack', async (req, res) => {
   try {
     const students = await server.db.collection("Student_info").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(students);
   } catch (error) {
-    console.error("Error retrieving student stack:", error);
-    res.status(500).send({ message: "Error retrieving student stack." });
+    handleDbError(res, "Error retrieving student stack.");
   }
 });
 
+// **New API to register a student**
+app.post('/api/student/register', async (req, res) => {
+  const { rfId, studentId, name } = req.body;
+  const newStudent = {
+    rfId,
+    studentId,
+    name,
+    keyStatus: 'Available',
+    lastKeyActivityTime: new Date().toISOString(),
+    studentBannedStatus: false,
+    studentWarningStatus: 0,
+    TakenKeyNumber: null
+  };
+
+  if (!rfId || !studentId || !name) {
+    return res.status(400).send({ message: "RFID, Student ID, and Name are required." });
+  }
+
+  try {
+    const result = await server.db.collection("Student_info").insertOne(newStudent);
+    res.status(201).send({ message: `Student ${name} registered successfully!`, studentId: result.insertedId });
+  } catch (error) {
+    handleDbError(res, "Error registering student.");
+  }
+});
+
+// Start server
 app.listen(port, () => {
   console.log(`App listening on port ${port}`);
 });
