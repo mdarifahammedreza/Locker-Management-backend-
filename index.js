@@ -50,7 +50,7 @@ const handleDbError = (res, errorMessage, statusCode = 500) => {
 // Routes
 app.get('/', (req, res) => res.send(status));
 
-// Helper: Common DB actions
+
 const insertIfNotExists = async (collectionName, query, newEntry) => {
   const collection = db.collection(collectionName);
   const existingEntry = await collection.findOne(query);
@@ -77,7 +77,8 @@ app.post('/api/Locker/key', async (req, res) => {
     handleDbError(res, "Error adding key to stack.");
   }
 });
-
+const message = "runinggggggg"
+console.log(message);
 // Book a Key
 app.post('/api/student/booked-key', async (req, res) => {
   const { data: rfId, key: bookedKey } = req.body;
