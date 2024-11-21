@@ -14,7 +14,7 @@ const status = {
 };
 
 // MongoDB connection
-const uri = `mongodb+srv://reza1:${process.env.PASS}@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&appName=REZA`;
+const uri = `mongodb+srv://reza1:QxAB25LI1yJJ65AG@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&appName=REZA`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
