@@ -121,6 +121,7 @@ app.get('/api/Locker/stack', async (req, res) => {
     const keys = await db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(keys);
   } catch (error) {
+    console.log(error);
     handleDbError(res, "Error retrieving stack.");
   }
 });
