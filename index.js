@@ -29,17 +29,20 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-(async () => {
-  try {
-    console.log("Connecting to MongoDB...");
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-    console.log("Successfully connected to MongoDB!");
-    db = client.db('reza1');
-  } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
+let cachedDb = null;
+
+async function connectToMongoDB() {
+  if (cachedDb) {
+    return cachedDb;
   }
-})();
+  console.log("Connecting to MongoDB...");
+  await client.connect();
+  await client.db("admin").command({ ping: 1 });
+  console.log("Successfully connected to MongoDB!");
+  cachedDb = client.db('reza1');
+  return cachedDb;
+}
+connectToMongoDB().catch(console.error);
 
 // Helper: Handle DB errors
 const handleDbError = (res, errorMessage, statusCode = 500) => {
