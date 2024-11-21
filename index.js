@@ -14,7 +14,8 @@ const status = {
 };
 
 // MongoDB connection
-const uri = `mongodb+srv://reza1:QxAB25LI1yJJ65AG@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&appName=REZA`;
+const uri = `mongodb+srv://reza1:QxAB25LI1yJJ65AG@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&tls=true&appName=REZA`;
+// const uri =  'mongodb://reza1:QxAB25LI1yJJ65AG@reza-shard-00-00.lrvbq.mongodb.net:27017,reza-shard-00-01.lrvbq.mongodb.net:27017,reza-shard-00-02.lrvbq.mongodb.net:27017/?replicaSet=atlas-g3el6m-shard-0&authSource=admin&retryWrites=true&w=majority';;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
