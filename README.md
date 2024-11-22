@@ -1,5 +1,4 @@
-Here is an example of an implementation README file for your project:
-
+Here is an example of an implementation README file for your projec
 ---
 
 # Library Locker Key Management System
