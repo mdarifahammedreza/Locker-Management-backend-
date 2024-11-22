@@ -105,7 +105,7 @@ app.post('/api/student/booked-key', async (req, res) => {
 
     await stackCollection.deleteOne({ Key_ID: key });
 
-    res.status(200).send({ message: `Key booked successfully!->${key}` });
+    res.status(200).send({ authorized: true});
   } catch (error) {
     handleDbError(res, "Error booking the key.");
   }
