@@ -1,129 +1,164 @@
 const express = require('express');
 const cors = require('cors');
-const status = require('./Status.js');
-const Server = require('./RunServer.js');
+const { MongoClient, ServerApiVersion } = require('mongodb');
+require('dotenv').config();
+
 const app = express();
 const port = 3000;
 
-// Initialize server and database connection
-const server = new Server();
+const status = {
+  Status_code: 400,
+  Status: "Locker server running successfully",
+  Author: "Md Arif Ahammed Reza",
+  Contact: "reza35-951@diu.edu.bd"
+};
 
-(async () => {
-  await server.RunServer();
-  console.log(status.Author);
-})();
+// MongoDB connection
+const uri = `mongodb+srv://reza1:${process.env.PASS}@reza.lrvbq.mongodb.net/?retryWrites=true&w=majority&appName=REZA`;
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+let db;
 
-// Middleware for CORS and JSON handling
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Helper function to handle DB errors and responses
+// Connect to MongoDB
+(async () => {
+  try {
+    console.log("Connecting to MongoDB...");
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log("Successfully connected to MongoDB!");
+    db = client.db('reza1');
+  } catch (error) {
+    console.error("Error connecting to MongoDB:", error);
+  }
+})();
+
+// Helper: Handle DB errors
 const handleDbError = (res, errorMessage, statusCode = 500) => {
-  console.error(errorMessage, errorMessage);
+  console.error(errorMessage);
   res.status(statusCode).send({ message: errorMessage });
 };
 
-// Route for status
+// Routes
 app.get('/', (req, res) => res.send(status));
 
-// Route to handle key stack actions (simplified for reuse)
+
+const insertIfNotExists = async (collectionName, query, newEntry) => {
+  const collection = db.collection(collectionName);
+  const existingEntry = await collection.findOne(query);
+  if (existingEntry) {
+    return { message: "Entry already exists.", success: false };
+  }
+  await collection.insertOne(newEntry);
+  return { message: "Entry added successfully!", success: true };
+};
+
+// Add Key to Stack
 app.post('/api/Locker/key', async (req, res) => {
-  const { data } = req.body;
+  const { data: Key_ID } = req.body;
+
+  if (!Key_ID) return res.status(400).send({ message: "Key ID is required." });
+
   try {
-    const message = await server.StackOfKey(data);
-    res.json(message);
+    const collection = db.collection("Stack_of_Keys");
+    const date = new Date();
+    const newEntry = { Key_ID, date: date.toISOString(), time: date.toLocaleTimeString() };
+    const result = await insertIfNotExists("Stack_of_Keys", { Key_ID }, newEntry);
+    res.status(200).send(result);
   } catch (error) {
-    handleDbError(res, "Error processing the key stack.");
+    handleDbError(res, "Error adding key to stack.");
   }
 });
-
-// Route for booking key by RFID (with booking logic reused)
+const message = "runinggggggg"
+console.log(message);
+// Book a Key
 app.post('/api/student/booked-key', async (req, res) => {
   const { data: rfId, key: bookedKey } = req.body;
 
   if (!rfId) return res.status(400).send({ message: "RFID is required." });
 
-  if (bookedKey) {
-    try {
-      const message = await server.StackOfKey(bookedKey);
-      await server.db.collection("Student_info").updateOne(
-        { rfId },
-        { $set: { keyStatus: "Available", lastKeyActivityTime: new Date().toISOString(), TakenKeyNumber: null } }
-      );
-      return res.json(message);
-    } catch (error) {
-      return handleDbError(res, "Error processing the key stack.");
-    }
-  }
-
   try {
-    const key = (await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray())[0]?.Key_ID;
+    const studentCollection = db.collection("Student_info");
+    const stackCollection = db.collection("Stack_of_Keys");
+
+    const student = await studentCollection.findOne({ rfId });
+    if (!student) return res.status(404).send({ message: "Student not found!" });
+    if (student.keyStatus === "Taken") {
+      return res.status(200).send({ message: "Key already taken!", code: "Camera activated" });
+    }
+
+    const key = bookedKey || (await stackCollection.find({}).sort({ _id: -1 }).toArray())[0]?.Key_ID;
     if (!key) return res.status(404).send({ message: "No keys available." });
 
-    const student = await server.db.collection("Student_info").findOne({ rfId });
-    if (!student) return res.status(404).send({ message: "Student not found!" });
-    if (student.keyStatus === 'Taken') return res.status(200).send({ message: "Key already taken!", code: "Camera activated" });
-
-    await server.db.collection("Student_info").updateOne(
+    await studentCollection.updateOne(
       { rfId },
       { $set: { keyStatus: "Taken", lastKeyActivityTime: new Date().toISOString(), TakenKeyNumber: key } }
     );
 
-    await server.db.collection("Stack_of_Keys").deleteOne({ Key_ID: key });
+    await stackCollection.deleteOne({ Key_ID: key });
 
-    res.status(200).send({ message: `Key booked successfully!->${key}` });
+    res.status(200).send({ authorized: true});
   } catch (error) {
-    return handleDbError(res, "Error booking the key.");
+    handleDbError(res, "Error booking the key.");
   }
 });
 
-// Route to retrieve the stack of keys
+// Get Stack of Keys
 app.get('/api/Locker/stack', async (req, res) => {
   try {
-    const keys = await server.db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray();
+    const keys = await db.collection("Stack_of_Keys").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(keys);
   } catch (error) {
     handleDbError(res, "Error retrieving stack.");
   }
 });
 
-// Route to retrieve student stack
+// Get Student Info
 app.get('/api/student/stack', async (req, res) => {
   try {
-    const students = await server.db.collection("Student_info").find({}).sort({ _id: -1 }).toArray();
+    const students = await db.collection("Student_info").find({}).sort({ _id: -1 }).toArray();
     res.status(200).send(students);
   } catch (error) {
     handleDbError(res, "Error retrieving student stack.");
   }
 });
 
-// **New API to register a student**
+// Register Student
 app.post('/api/student/register', async (req, res) => {
   const { rfId, studentId, name } = req.body;
+
+  if (!rfId || !studentId || !name) {
+    return res.status(400).send({ message: "RFID, Student ID, and Name are required." });
+  }
+
   const newStudent = {
     rfId,
     studentId,
     name,
-    keyStatus: 'Available',
+    keyStatus: "Available",
     lastKeyActivityTime: new Date().toISOString(),
     studentBannedStatus: false,
     studentWarningStatus: 0,
     TakenKeyNumber: null
   };
 
-  if (!rfId || !studentId || !name) {
-    return res.status(400).send({ message: "RFID, Student ID, and Name are required." });
-  }
-
   try {
-    const result = await server.db.collection("Student_info").insertOne(newStudent);
-    res.status(201).send({ message: `Student ${name} registered successfully!`, studentId: result.insertedId });
+    const result = await insertIfNotExists("Student_info", { rfId }, newStudent);
+    res.status(201).send({ message: `Student ${name} registered successfully!`, success: result.success });
   } catch (error) {
     handleDbError(res, "Error registering student.");
   }
 });
 
-// Start server
+// Start Server
 app.listen(port, () => {
   console.log(`App listening on port ${port}`);
 });
